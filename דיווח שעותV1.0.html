@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>דיווח שעות</title>
+  <style>
+    /* Add CSS styles here */
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    main {
+      width: 900px;
+      padding: 50px;
+      border: 1px solid black;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+
+    th, td {
+      padding: 8px;
+      text-align: center;
+      border: 1px solid black;
+      FONT-SIZE: 20PX;
+    }
+
+    thead th {
+      border-bottom: 2px solid black;
+    }
+
+    tbody tr:not(:last-child) {
+      border-bottom: 1px solid black;
+    }
+
+    td:not(:last-child) {
+      border-right: 1px solid black;
+    }
+
+    .missing-hours {
+      background-color: #ffcccc;
+    }
+
+    .over-hours {
+      background-color: #ccffcc;
+    }
+
+    .delete-button {
+      padding: 4px 8px;
+      background-color: #ff4d4d;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .delete-button:hover {
+      background-color: #ff1a1a;
+    }
+
+    #timeForm {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 100px;
+    }
+
+    #timeForm label {
+      font-size:24px;
+      flex: 0 0 100px;
+      text-align: right;
+      margin-right: 10px;
+    }
+
+    #timeForm input[type="date"],
+    #timeForm input[type="time"] {
+      MARGIN-RIGHT: 20PX;
+      width: 180px;
+      FONT-SIZE: 20PX;
+    }
+
+    #timeForm button[type="submit"] {
+      padding: 6px 12px;
+      background-color: #4d79ff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    #timeForm button[type="submit"]:hover {
+      background-color: #1a53ff;
+    }
+
+    #timeForm button[type="submit"]:focus {
+      outline: none;
+    }
+
+    #totalsRow td {
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1 style="text-align: center;FONT-SIZE:48PX;">דיווח שעות</h1>
+
+    <form id="timeForm">
+      <label for="date">תאריך</label>
+      <input type="date" id="date" name="date">
+
+      <label for="entryTime">כניסה:</label>
+      <input type="time" id="entryTime" name="entryTime">
+
+      <label for="exitTime">יציאה:</label>
+      <input type="time" id="exitTime" name="exitTime">
+
+      <button type="submit">עדכן</button>
+    </form>
+
+    <table id="timeTable">
+      <thead>
+        <tr>
+          <th>תאריך</th>
+          <th>יום</th>
+          <th>כניסה</th>
+          <th>יציאה</th>
+          <th>עבודה</th>
+          <th>היעדרות</th>
+          <th>נוספות</th>
+          <th>פעולה</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Table rows will be dynamically added here -->
+      </tbody>
+      <tfoot>
+        <tr id="totalsRow">
+          <td colspan="5">סה"כ:</td>
+          <td colspan="1" id="timeMissingTotal">0 minutes</td>
+          <td colspan="1" id="timeOverTotal">0 minutes</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+    <button onclick="savePage()">שמור דף</button>
+  </main>
+
+  <script>
+    const form = document.getElementById('timeForm');
+    const table = document.getElementById('timeTable');
+    const tbody = table.querySelector('tbody');
+    const timeMissingTotal = document.getElementById('timeMissingTotal');
+    const timeOverTotal = document.getElementById('timeOverTotal');
+
+    let timeEntries = [];
+
+    // Load saved data when the page is loaded
+    window.addEventListener('DOMContentLoaded', function () {
+      const savedData = localStorage.getItem('timeEntries');
+
+      if (savedData) {
+        timeEntries = JSON.parse(savedData);
+        renderTimeEntries();
+        updateTotalTime();
+      }
+    });
+
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      // Get form values
+      const date = document.getElementById('date').value;
+      const entryTime = document.getElementById('entryTime').value;
+      const exitTime = document.getElementById('exitTime').value;
+
+      // Calculate the time difference
+      const diff = Math.abs(new Date(`1970/01/01 ${exitTime}`) - new Date(`1970/01/01 ${entryTime}`));
+      const calculatedTime = new Date(diff).toISOString().substr(11, 8);
+
+      // Get the day of the week and check if it's Sunday
+      const dayOfWeek = new Date(date).getDay();
+      const isSunday = dayOfWeek === 0;
+
+      // Get the day before the date
+      const prevDate = new Date(date);
+      prevDate.setDate(prevDate.getDate() - 1);
+      const selectedDay = new Date(date).toLocaleDateString('he-IL', { weekday: 'long' });
+
+      // Calculate the minimum hours based on the day of the week
+      const minimumHours = isSunday ? '8:30' : '9:00';
+
+      // Check if the minimum hours requirement is met
+      const overHours = new Date(`1970/01/01 ${calculatedTime}`) > new Date(`1970/01/01 ${minimumHours}`);
+      const timeDifference = Math.abs(new Date(`1970/01/01 ${minimumHours}`) - new Date(`1970/01/01 ${calculatedTime}`));
+      const timeMissing = overHours ? '' : new Date(timeDifference).toISOString().substr(11, 5);
+      const timeOver = overHours ? new Date(timeDifference).toISOString().substr(11, 5) : '';
+
+      // Update the total missing and over time
+      updateTotalTime();
+
+      // Create a new time entry object
+      const newEntry = {
+        date,
+        selectedDay,
+        entryTime,
+        exitTime,
+        calculatedTime,
+        timeMissing,
+        timeOver
+      };
+
+      // Add the new entry to the array
+      timeEntries.push(newEntry);
+
+      // Save the updated data
+      saveData();
+
+      // Render the time entries
+      renderTimeEntries();
+
+      // Reset the form
+      form.reset();
+    });
+
+    function renderTimeEntries() {
+      // Clear the table body
+      tbody.innerHTML = '';
+
+      // Render each time entry as a table row
+      timeEntries.forEach(entry => {
+        const newRow = document.createElement('tr');
+        newRow.innerHTML = `
+          <td>${entry.date}</td>
+          <td>${entry.selectedDay}</td>
+          <td>${entry.entryTime}</td>
+          <td>${entry.exitTime}</td>
+          <td>${entry.calculatedTime}</td>
+          <td>${entry.timeMissing}</td>
+          <td>${entry.timeOver}</td>
+          <td><button class="delete-button">Delete</button></td>
+        `;
+
+        // Apply the appropriate CSS class to the row based on missing or over time
+        if (entry.timeMissing) {
+          newRow.classList.add('missing-hours');
+        }
+        if (entry.timeOver) {
+          newRow.classList.add('over-hours');
+        }
+
+        // Add delete functionality to the delete button
+        const deleteButton = newRow.querySelector('.delete-button');
+        deleteButton.addEventListener('click', function() {
+          deleteTimeEntry(entry);
+        });
+
+        // Append the new row to the table
+        tbody.appendChild(newRow);
+      });
+    }
+
+    function deleteTimeEntry(entry) {
+      // Find the index of the entry in the array
+      const index = timeEntries.indexOf(entry);
+
+      // Remove the entry from the array
+      timeEntries.splice(index, 1);
+
+      // Save the updated data
+      saveData();
+
+      // Render the time entries
+      renderTimeEntries();
+
+      // Update the total time
+      updateTotalTime();
+    }
+
+    function updateTotalTime() {
+      let totalMissing = 0;
+      let totalOver = 0;
+
+      // Iterate through each time entry and update the total missing and over time
+      timeEntries.forEach(entry => {
+        if (entry.timeMissing) {
+          totalMissing += getMillisecondsFromTimeString(entry.timeMissing);
+        }
+        if (entry.timeOver) {
+          totalOver += getMillisecondsFromTimeString(entry.timeOver);
+        }
+      });
+
+      timeMissingTotal.textContent = `${Math.floor(totalMissing / 60000)} minutes`;
+      timeOverTotal.textContent = `${Math.floor(totalOver / 60000)} minutes`;
+    }
+
+    function getMillisecondsFromTimeString(timeString) {
+      const [hours, minutes] = timeString.split(':');
+      return (parseInt(hours) * 60 + parseInt(minutes)) * 60000;
+    }
+
+    function saveData() {
+      // Save the timeEntries array to local storage
+      localStorage.setItem('timeEntries', JSON.stringify(timeEntries));
+    }
+
+    function savePage() {
+      // Get the page content
+      var pageContent = document.documentElement.outerHTML;
+
+      // Create a temporary element to hold the content
+      var tempElement = document.createElement('a');
+      tempElement.setAttribute('href', 'data:text/html;charset=windows-1255,' + encodeURIComponent(pageContent));
+      tempElement.setAttribute('download', 'דיווח שעות.html');
+      tempElement.style.display = 'none';
+
+      // Add the temporary element to the document
+      document.body.appendChild(tempElement);
+
+      // Simulate a click to download the file
+      tempElement.click();
+
+      // Remove the temporary element
+      document.body.removeChild(tempElement);
+    }
+  </script>
+</body>
+</html>
